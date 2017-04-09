@@ -13,18 +13,65 @@
 */
 static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_data *pkt, void *data) {
   int i;
-  struct nfqnl_msg_packet_hdr *header;
+  // nfq related variable
+  struct nfqnl_msg_packet_hdr *nfq_header;
   struct nfqnl_msg_packet_hw *hwph;
+  unsigned int nfq_id;
+
+  nfq_header = nfq_get_msg_packet_hdr(pkt);
+  if (nfq_header != NULL) {
+    nfq_id = ntohl(nfq_header->packet_id);
+  }
+
 
   char *payload;
   int data_len = nfq_get_payload(pkt, &payload);
   struct iphdr *iph = (struct iphdr*) payload;
 
+  // check the protocol type, only accept TCP
   if (iph->protocol == IPPROTO_TCP) {
     // TCP packets
+    // check in or outbound
+    if (inbound) {
+      // inbound
+      // search dest port match nat table
+      if (yes) {
+        // modifies the ip and tcp header
+        // recalculate checksum
+        // accept
+      } else {
+        // no match port found, drop
+        printf("DROP\n");
+        return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
+      }
+    } else {
+      // outbound
+      // check is there entry in nat table
+      if (yes) {
+        // use the nat table information for further process
+      } else {
+        // no entry found
+        // check is it a SYN packet
+        if (yes) {
+          // create a new entry
+          // the source IP-port pair
+          // the newly assigned port number (between 10000 and 12000) incremental
+        } else {
+          // not a SYN packet, drop
+          printf("DROP\n");
+          return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
+        }
+      }
+      //do the translation and forward it
+      // translation here
+      return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
+
+    }
 
   } else {
-    // Others, can be ignored
+    // Others protocol, drop
+    printf("DROP\n");
+    return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
   }
 
   // Print the payload;
@@ -37,23 +84,6 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     }
   }
   printf("]\n");
-
-  // for the first 20 packeks, a packet[id] is accept, if
-  // accept[id-1] = 1.
-  // All packets with id > 20, will be accepted
-
-  // if (id <= 20) {
-  //   if (accept[id-1]) {
-  //     printf("ACCEPT\n");
-  //     return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
-  //   } else {
-  //     printf("DROP\n");
-  //     return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-  //   }
-  // } else {
-  //   printf("ACCEPT\n");
-  //   return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
-  // }
 
 }
 
@@ -70,6 +100,17 @@ int main(int argc, char **argv){
   char *public_ip;
   char *internal_ip;
   char *subnet_mask;
+
+
+  // Check the number of run-time argument
+  if(argc != 4){
+    fprintf(stderr, "Usage: %s <public ip> <internal ip> <subnet mask>\n", argv[0]);
+    exit(1);
+  }
+
+  public_ip = argv[1];
+  internal_ip = argv[2];
+  subnet_mask = argv[3];
 
   // Open library handle
   if (!(h = nfq_open())) {
