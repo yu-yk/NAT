@@ -7,6 +7,10 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <checksum.h>
 
+//global variable
+char *public_ip;
+char *internal_ip;
+char *subnet_mask;
 
 /*
 * Callback function installed to netfilter queue
@@ -27,14 +31,34 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   char *payload;
   int data_len = nfq_get_payload(pkt, &payload);
   struct iphdr *iph = (struct iphdr*) payload;
+  unsigned int source_ip = ntohl(iph->saddr);
+  unsigned int dest_ip = ntohl(iph->daddr);
+
+  struct tcphdr *tcph = (struct tcphdr *)(((char*) iph) + iph->ihl << 2);
+  unsigned int source_port = ntohs(tcph->source);
+  unsigned int dest_port = ntohs(tcph->dest);
+  //flag bit
+  unsigned int SYN = ntohs(tcph->syn);
+  unsigned int ACK = ntohs(tcph->ack);
+  unsigned int FIN = ntohs(tcph->fin);
+  unsigned int RST = ntohs(tcph->rst);
 
   // check the protocol type, only accept TCP
   if (iph->protocol == IPPROTO_TCP) {
     // TCP packets
+    int inbound = 0;
+    int mask_int = atoi(subnet_mask);
+    unsigned int local_mask = 0xffffffff << (32-mask_int)
+    unsigned int local_network = (ntohl(inet_aton(internal_ip) & local_mask);
     // check in or outbound
+    if ((source_ip & local_mask) == local_network) {
+      inbound = 1;
+    }
+
     if (inbound) {
       // inbound
       // search dest port match nat table
+
       if (yes) {
         // modifies the ip and tcp header
         // recalculate checksum
@@ -97,9 +121,6 @@ int main(int argc, char **argv){
   int fd;
   int len;
   char buf[4096];
-  char *public_ip;
-  char *internal_ip;
-  char *subnet_mask;
 
 
   // Check the number of run-time argument
