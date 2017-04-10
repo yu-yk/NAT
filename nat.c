@@ -43,6 +43,8 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   unsigned int FIN = ntohs(tcph->fin);
   unsigned int RST = ntohs(tcph->rst);
 
+  // nat table
+
   // check the protocol type, only accept TCP
   if (iph->protocol == IPPROTO_TCP) {
     // TCP packets
