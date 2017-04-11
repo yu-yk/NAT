@@ -2,100 +2,109 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <table.h>
 
-#define SIZE 20
+#define SIZE 100
 
-struct DataItem {
-   int data;
-   int key;
+struct IP_PORT {
+  unsigned int ip;
+  unsigned int port;
 };
 
-struct DataItem* hashArray[SIZE];
-struct DataItem* dummyItem;
-struct DataItem* item;
+struct Entry {
+  int key; // use port number to be the key
+  struct IP_PORT *wan;
+  struct IP_PORT *lan;
+};
+
+struct Entry* hashArray[SIZE];
+struct Entry* dummyEntry;
+struct Entry* entry;
 
 int hashCode(int key) {
-   return key % SIZE;
+  return key % SIZE;
 }
 
-struct DataItem *search(int key) {
-   //get the hash
-   int hashIndex = hashCode(key);
+struct Entry *search(int key) {
+  //get the hash
+  int hashIndex = hashCode(key);
 
-   //move in array until an empty
-   while(hashArray[hashIndex] != NULL) {
+  //move in array until an empty
+  while(hashArray[hashIndex] != NULL) {
 
-      if(hashArray[hashIndex]->key == key)
-         return hashArray[hashIndex];
+    if(hashArray[hashIndex]->key == key)
+    return hashArray[hashIndex];
 
-      //go to next cell
-      ++hashIndex;
+    //go to next cell
+    ++hashIndex;
 
-      //wrap around the table
-      hashIndex %= SIZE;
-   }
+    //wrap around the table
+    hashIndex %= SIZE;
+  }
 
-   return NULL;
+  return NULL;
 }
 
-void insert(int key,int data) {
+void insert(int key, struct IP_PORT *wan, struct IP_PORT *lan) {
 
-   struct DataItem *item = (struct DataItem*) malloc(sizeof(struct DataItem));
-   item->data = data;
-   item->key = key;
+  struct Entry *entry = (struct Entry*) malloc(sizeof(struct Entry));
+  entry->key = key;
+  entry->wan = wan;
+  entry->lan = lan;
 
-   //get the hash
-   int hashIndex = hashCode(key);
+  //get the hash
+  int hashIndex = hashCode(key);
 
-   //move in array until an empty or deleted cell
-   while(hashArray[hashIndex] != NULL && hashArray[hashIndex]->key != -1) {
-      //go to next cell
-      ++hashIndex;
+  //move in array until an empty or deleted cell
+  while(hashArray[hashIndex] != NULL && hashArray[hashIndex]->key != -1) {
+    //go to next cell
+    ++hashIndex;
 
-      //wrap around the table
-      hashIndex %= SIZE;
-   }
+    //wrap around the table
+    hashIndex %= SIZE;
+  }
 
-   hashArray[hashIndex] = item;
+  hashArray[hashIndex] = entry;
 }
 
-struct DataItem* delete(struct DataItem* item) {
-   int key = item->key;
+struct Entry* delete(struct Entry* entry) {
+  int key = entry->key;
 
-   //get the hash
-   int hashIndex = hashCode(key);
+  //get the hash
+  int hashIndex = hashCode(key);
 
-   //move in array until an empty
-   while(hashArray[hashIndex] != NULL) {
+  //move in array until an empty
+  while(hashArray[hashIndex] != NULL) {
 
-      if(hashArray[hashIndex]->key == key) {
-         struct DataItem* temp = hashArray[hashIndex];
+    if(hashArray[hashIndex]->key == key) {
+      struct Entry* temp = hashArray[hashIndex];
 
-         //assign a dummy item at deleted position
-         hashArray[hashIndex] = dummyItem;
-         return temp;
-      }
+      //assign a dummy item at deleted position
+      hashArray[hashIndex] = dummyEntry;
+      return temp;
+    }
 
-      //go to next cell
-      ++hashIndex;
+    //go to next cell
+    ++hashIndex;
 
-      //wrap around the table
-      hashIndex %= SIZE;
-   }
+    //wrap around the table
+    hashIndex %= SIZE;
+  }
 
-   return NULL;
+  return NULL;
 }
 
 void display() {
-   int i = 0;
+  int i = 0;
 
-   for(i = 0; i<SIZE; i++) {
+  for(i = 0; i<SIZE; i++) {
 
-      if(hashArray[i] != NULL)
-         printf(" (%d,%d)",hashArray[i]->key,hashArray[i]->data);
-      else
-         printf(" ~~ ");
-   }
+    if(hashArray[i] != NULL)
+    printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->wan->ip, hashArray[i]->wan->port);
+    printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->lan->ip, hashArray[i]->lan->port);
+    else
+    printf(" ~~ ");
+  }
 
-   printf("\n");
+  printf("\n");
 }
