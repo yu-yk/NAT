@@ -1,16 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "table.h"
+#include "table.c"
 
 
 int main() {
    struct Entry* dummyEntry = (struct Entry*) malloc(sizeof(struct Entry));
-   struct IP_PORT *wan;
+   struct IP_PORT *wan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
    wan->ip = 100;
    wan->port = 1000;
-   struct IP_PORT *lan;
+   struct IP_PORT *lan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
    lan->ip = 200;
-   wan->port = 2000;
+   lan->port = 2000;
    struct Entry* entry;
 
 
