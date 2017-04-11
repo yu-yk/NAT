@@ -6,6 +6,7 @@
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <checksum.h>
+#include <table.h>
 
 //global variable
 char *public_ip;

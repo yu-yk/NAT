@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <table.h>
 
 #define SIZE 100
 
@@ -99,11 +98,12 @@ void display() {
 
   for(i = 0; i<SIZE; i++) {
 
-    if(hashArray[i] != NULL)
-    printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->wan->ip, hashArray[i]->wan->port);
-    printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->lan->ip, hashArray[i]->lan->port);
-    else
-    printf(" ~~ ");
+    if(hashArray[i] != NULL) {
+      printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->wan->ip, hashArray[i]->wan->port);
+      printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->lan->ip, hashArray[i]->lan->port);
+    } else {
+      printf(" ~~ ");
+    }
   }
 
   printf("\n");
