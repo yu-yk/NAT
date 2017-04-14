@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#define SIZE 100
 
 struct IP_PORT {
   unsigned int ip;
@@ -11,100 +10,134 @@ struct IP_PORT {
 };
 
 struct Entry {
-  int key; // use port number to be the key
+  struct Entry *next; // use port number to be the key
   struct IP_PORT *wan;
   struct IP_PORT *lan;
 };
 
-struct Entry* hashArray[SIZE];
-struct Entry* dummyEntry;
-struct Entry* entry;
+struct Entry *head = NULL;
+struct Entry *current = NULL;
 
-int hashCode(int key) {
-  return key % SIZE;
+//insert link at the first location
+void insertFirst(struct IP_PORT *wan, struct IP_PORT *lan) {
+   //create a link
+   struct Entry *entry = (struct Entry*) malloc(sizeof(struct Entry));
+
+   entry->wan = wan;
+   entry->lan = lan;
+
+   //point it to old first node
+   entry->next = head;
+
+   //point first to new first node
+   head = entry;
 }
 
-struct Entry *search(int key) {
-  //get the hash
-  int hashIndex = hashCode(key);
+//delete first item
+struct Entry* deleteFirst() {
 
-  //move in array until an empty
-  while(hashArray[hashIndex] != NULL) {
+   //save reference to first link
+   struct Entry *tempLink = head;
 
-    if(hashArray[hashIndex]->key == key)
-    return hashArray[hashIndex];
+   //mark next to first link as first
+   head = head->next;
 
-    //go to next cell
-    ++hashIndex;
-
-    //wrap around the table
-    hashIndex %= SIZE;
-  }
-
-  return NULL;
+   //return the deleted link
+   return tempLink;
 }
 
-void insert(int key, struct IP_PORT *wan, struct IP_PORT *lan) {
-
-  struct Entry *entry = (struct Entry*) malloc(sizeof(struct Entry));
-  entry->key = key;
-  entry->wan = wan;
-  entry->lan = lan;
-
-  //get the hash
-  int hashIndex = hashCode(key);
-
-  //move in array until an empty or deleted cell
-  while(hashArray[hashIndex] != NULL && hashArray[hashIndex]->key != -1) {
-    //go to next cell
-    ++hashIndex;
-
-    //wrap around the table
-    hashIndex %= SIZE;
-  }
-
-  hashArray[hashIndex] = entry;
+//is list empty
+bool isEmpty() {
+   return head == NULL;
 }
 
-struct Entry* delete(struct Entry* entry) {
-  int key = entry->key;
+int length() {
+   int length = 0;
+   struct Entry *current;
 
-  //get the hash
-  int hashIndex = hashCode(key);
+   for(current = head; current != NULL; current = current->next) {
+      length++;
+   }
 
-  //move in array until an empty
-  while(hashArray[hashIndex] != NULL) {
-
-    if(hashArray[hashIndex]->key == key) {
-      struct Entry* temp = hashArray[hashIndex];
-
-      //assign a dummy item at deleted position
-      hashArray[hashIndex] = dummyEntry;
-      return temp;
-    }
-
-    //go to next cell
-    ++hashIndex;
-
-    //wrap around the table
-    hashIndex %= SIZE;
-  }
-
-  return NULL;
+   return length;
 }
 
-void display() {
-  int i = 0;
+//find a link with given key
+struct Entry* find(unsigned int ip, unsigned int port) {
 
-  for(i = 0; i<SIZE; i++) {
+   //start from the first link
+   struct Entry* current = head;
 
-    if(hashArray[i] != NULL) {
-      printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->wan->ip, hashArray[i]->wan->port);
-      printf(" (%d,%d,%d)",hashArray[i]->key,hashArray[i]->lan->ip, hashArray[i]->lan->port);
-    } else {
-      printf(" ~~ ");
-    }
-  }
+   //if list is empty
+   if(head == NULL) {
+      return NULL;
+   }
 
-  printf("\n");
+   //navigate through list
+   while((current->wan->ip!=ip || current->wan->port!=port) && (current->lan->ip!=ip || current->lan->port!=port)) {
+
+      //if it is last node
+      if(current->next == NULL) {
+         return NULL;
+      } else {
+         //go to next link
+         current = current->next;
+      }
+   }
+
+   //if data found, return the current Link
+   return current;
+}
+
+//delete a link with given key
+struct Entry* delete(unsigned int ip, unsigned int port) {
+
+   //start from the first link
+   struct Entry* current = head;
+   struct Entry* previous = NULL;
+
+   //if list is empty
+   if(head == NULL) {
+      return NULL;
+   }
+
+   //navigate through list
+   while((current->wan->ip!=ip || current->wan->port!=port) && (current->lan->ip!=ip || current->lan->port!=port)) {
+
+      //if it is last node
+      if(current->next == NULL) {
+         return NULL;
+      } else {
+         //store reference to current link
+         previous = current;
+         //move to next link
+         current = current->next;
+      }
+   }
+
+   //found a match, update the link
+   if(current == head) {
+      //change first to point to next link
+      head = head->next;
+   } else {
+      //bypass the current link
+      previous->next = current->next;
+   }
+
+   return current;
+}
+
+//display the list
+void printList() {
+   struct Entry *ptr = head;
+   printf("\n[ ");
+
+   //start from the beginning
+   while(ptr != NULL) {
+      printf("(%d,%d) ",ptr->wan->ip,ptr->wan->port);
+      printf("(%d,%d) ",ptr->lan->ip,ptr->lan->port);
+      ptr = ptr->next;
+   }
+
+   printf(" ]");
 }

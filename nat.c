@@ -6,12 +6,13 @@
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <checksum.h>
-#include <table.h>
+#include "table.c"
 
 //global variable
 char *public_ip;
 char *internal_ip;
 char *subnet_mask;
+unsigned int wan_port = 10000;
 
 /*
 * Callback function installed to netfilter queue
@@ -44,7 +45,6 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   unsigned int FIN = ntohs(tcph->fin);
   unsigned int RST = ntohs(tcph->rst);
 
-  // nat table
 
   // check the protocol type, only accept TCP
   if (iph->protocol == IPPROTO_TCP) {
@@ -53,6 +53,8 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     int mask_int = atoi(subnet_mask);
     unsigned int local_mask = 0xffffffff << (32-mask_int)
     unsigned int local_network = (ntohl(inet_aton(internal_ip) & local_mask);
+    // create an dummy entry for stroing the nat data
+    struct Entry *tempEntry = (struct Entry*) malloc(sizeof(struct Entry));
     // check in or outbound
     if ((source_ip & local_mask) == local_network) {
       inbound = 1;
@@ -61,8 +63,9 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     if (inbound) {
       // inbound
       // search dest port match nat table
+      tempEntry = find(dest_ip, dest_port);
 
-      if (yes) {
+      if (tempEntry != NULL) {
         // modifies the ip and tcp header
         // recalculate checksum
         // accept
@@ -71,26 +74,42 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         printf("DROP\n");
         return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
       }
+
     } else {
       // outbound
       // check is there entry in nat table
-      if (yes) {
-        // use the nat table information for further process
+      tempEntry = find(source_ip, source_port);
+      if (tempEntry != NULL) {
+        //do nothing, translation step is at the last
+
       } else {
         // no entry found
         // check is it a SYN packet
-        if (yes) {
+        if (SYN) {
           // create a new entry
           // the source IP-port pair
+          unsigned int wan_ip;
+          inet_pton(AF_INET, "10.3.1.3", &wan_ip);
+          struct IP_PORT *wan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
+          wan->ip = wan_ip;
+          wan->port = wan_port;
+          struct IP_PORT *lan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
+          lan->ip = source_ip;
+          lan->port = source_port;
+
+          insertFirst(wan, lan);
           // the newly assigned port number (between 10000 and 12000) incremental
+          wan_port++;
+
         } else {
           // not a SYN packet, drop
           printf("DROP\n");
           return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
         }
       }
-      //do the translation and forward it
-      // translation here
+      // do the translation
+
+      // forward it
       return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
 
     }
