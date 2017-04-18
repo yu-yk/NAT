@@ -13,7 +13,7 @@ int main() {
    lan->port = 2000;
 
    insertFirst(wan,lan);
-   dummy = find(wan);
+   dummy = find(wan->ip, wan->port);
 
    printf("data found, wan ip: %d, wan port: %d\n", dummy->wan->ip, dummy->wan->port);
 

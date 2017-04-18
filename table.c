@@ -2,18 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-
-
-struct IP_PORT {
-  unsigned int ip;
-  unsigned int port;
-};
-
-struct Entry {
-  struct Entry *next; // use port number to be the key
-  struct IP_PORT *wan;
-  struct IP_PORT *lan;
-};
+#include "table.h"
 
 struct Entry *head = NULL;
 struct Entry *current = NULL;
@@ -90,7 +79,7 @@ struct Entry* find(unsigned int ip, unsigned int port) {
 }
 
 //delete a link with given key
-struct Entry* delete(unsigned int ip, unsigned int port) {
+struct Entry* deleteEntry(unsigned int ip, unsigned int port) {
 
    //start from the first link
    struct Entry* current = head;

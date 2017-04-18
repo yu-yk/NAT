@@ -1,13 +1,13 @@
 CC=gcc
 CFLAGS=
-LDFLAGS=
+LDFLAGS=-lnetfilter_queue
 
 EXE = nat
 
 OBJ = table.o checksum.o
 
 ${EXE}: ${OBJ}
-	${CC} ${CFLAGS} -o ${EXE} ${OBJ} ${LDFLAGS}
+	${CC} nat.c ${CFLAGS} -o ${EXE} ${OBJ} ${LDFLAGS}
 
 clean:
 	rm -f ${EXE} ${OBJ}

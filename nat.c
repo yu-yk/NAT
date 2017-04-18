@@ -5,8 +5,8 @@
 #include <netinet/tcp.h>
 #include <linux/netfilter.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
-#include <checksum.h>
-#include "table.c"
+#include "checksum.h"
+#include "table.h"
 
 //global variable
 char *public_ip;
@@ -36,7 +36,8 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   unsigned int source_ip = ntohl(iph->saddr);
   unsigned int dest_ip = ntohl(iph->daddr);
 
-  struct tcphdr *tcph = (struct tcphdr *)(((char*) iph) + iph->ihl << 2);
+  struct tcphdr *tcph = (struct tcphdr *)(payload + (iph->ihl << 2));
+
   unsigned int source_port = ntohs(tcph->source);
   unsigned int dest_port = ntohs(tcph->dest);
   //flag bit
@@ -49,10 +50,11 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   // check the protocol type, only accept TCP
   if (iph->protocol == IPPROTO_TCP) {
     // TCP packets
+    struct in_addr container;
     int inbound = 0;
     int mask_int = atoi(subnet_mask);
-    unsigned int local_mask = 0xffffffff << (32-mask_int)
-    unsigned int local_network = (ntohl(inet_aton(internal_ip) & local_mask);
+    unsigned int local_mask = 0xffffffff << (32-mask_int);
+    unsigned int local_network = ntohl(inet_aton(internal_ip, &container) & local_mask);
     // create an dummy entry for stroing the nat data
     struct Entry *tempEntry = (struct Entry*) malloc(sizeof(struct Entry));
     // check in or outbound
@@ -63,7 +65,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     if (inbound) {
       // inbound
       // search dest port match nat table
-      tempEntry = find(dest_ip, dest_port);
+      tempEntry = (struct Entry*)find(dest_ip, dest_port);
 
       if (tempEntry != NULL) {
         // modifies the ip and tcp header
@@ -78,7 +80,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     } else {
       // outbound
       // check is there entry in nat table
-      tempEntry = find(source_ip, source_port);
+      tempEntry = (struct Entry*)find(source_ip, source_port);
       if (tempEntry != NULL) {
         //do nothing, translation step is at the last
 
@@ -113,7 +115,6 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
       return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
 
     }
-
   } else {
     // Others protocol, drop
     printf("DROP\n");
@@ -136,7 +137,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
 /*
 * Main program
 */
-int main(int argc, char **argv){
+int main(int argc, char **argv) {
   struct nfq_handle *h;
   struct nfq_q_handle *qh;
   struct nfnl_handle *nh;
@@ -147,7 +148,7 @@ int main(int argc, char **argv){
 
   // Check the number of run-time argument
   if(argc != 4){
-    fprintf(stderr, "Usage: %s <public ip> <internal ip> <subnet mask>\n", argv[0]);
+    fprintf(stderr, "Usage: ./%s <public ip> <internal ip> <subnet mask>\n", argv[0]);
     exit(1);
   }
 
