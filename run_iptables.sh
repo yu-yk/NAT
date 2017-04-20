@@ -1,7 +1,7 @@
 #!/bin/bash
 
-VMID=""                                 # group no.
-IP="10.3.1.$(expr ${VMID} \+ 200)"      # public interface
+VMID="3"                                 # group no.
+IP="10.3.1.$(expr ${VMID})"      # public interface
 LAN="10.0.${VMID}.0"                    # private LAN network address (without subnet mask)
 MASK="24"
 

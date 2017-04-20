@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <netinet/in.h>
 #include "table.h"
 
 struct Entry *head = NULL;
@@ -123,9 +124,13 @@ void printList() {
 
    //start from the beginning
    while(ptr != NULL) {
-      printf("(%d,%d) ",ptr->wan->ip,ptr->wan->port);
-      printf("(%d,%d) ",ptr->lan->ip,ptr->lan->port);
+      struct in_addr temp;
+      temp.s_addr = htonl(ptr->wan->ip);
+      printf("(%s,%d), ",(char*)inet_ntoa(temp),ptr->wan->port);
+      temp.s_addr = htonl(ptr->lan->ip);
+      printf("(%s,%d) ",(char*)inet_ntoa(temp),ptr->lan->port);
       ptr = ptr->next;
+      printf("\n");
    }
 
    printf(" ]");

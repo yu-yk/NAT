@@ -12,7 +12,11 @@
 char *public_ip;
 char *internal_ip;
 char *subnet_mask;
+uint32_t local_network;
+unsigned int local_mask;
+unsigned int wan_ip;
 unsigned int wan_port = 10000;
+
 
 /*
 * Callback function installed to netfilter queue
@@ -33,65 +37,83 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   char *payload;
   int data_len = nfq_get_payload(pkt, &payload);
   struct iphdr *iph = (struct iphdr*) payload;
-  unsigned int source_ip = ntohl(iph->saddr);
-  unsigned int dest_ip = ntohl(iph->daddr);
+  uint32_t source_ip = ntohl(iph->saddr);
+  uint32_t dest_ip = ntohl(iph->daddr);
 
   struct tcphdr *tcph = (struct tcphdr *)(payload + (iph->ihl << 2));
 
   unsigned int source_port = ntohs(tcph->source);
   unsigned int dest_port = ntohs(tcph->dest);
   //flag bit
-  unsigned int SYN = ntohs(tcph->syn);
-  unsigned int ACK = ntohs(tcph->ack);
-  unsigned int FIN = ntohs(tcph->fin);
-  unsigned int RST = ntohs(tcph->rst);
+  unsigned int SYN = tcph->syn;
+  unsigned int ACK = tcph->ack;
+  unsigned int FIN = tcph->fin;
+  unsigned int RST = tcph->rst;
 
+  printf("SYN = %d\n\n\n\n", SYN);
 
   // check the protocol type, only accept TCP
+  printf("check the protocol type, only accept TCP\n");
   if (iph->protocol == IPPROTO_TCP) {
     // TCP packets
-    struct in_addr container;
-    int inbound = 0;
-    int mask_int = atoi(subnet_mask);
-    unsigned int local_mask = 0xffffffff << (32-mask_int);
-    unsigned int local_network = ntohl(inet_aton(internal_ip, &container) & local_mask);
-    // create an dummy entry for stroing the nat data
+    int inbound = 1;
+
     struct Entry *tempEntry = (struct Entry*) malloc(sizeof(struct Entry));
     // check in or outbound
     if ((source_ip & local_mask) == local_network) {
-      inbound = 1;
+      inbound = 0;
     }
 
     if (inbound) {
       // inbound
       // search dest port match nat table
+      printf("search dest port match nat table\n");
       tempEntry = (struct Entry*)find(dest_ip, dest_port);
 
       if (tempEntry != NULL) {
         // modifies the ip and tcp header
+        printf("modifies the ip and tcp header\n");
+        // do the translation
+        iph->daddr = htonl(tempEntry->lan->ip);
+        tcph->dest = htons(tempEntry->lan->port);
+
         // recalculate checksum
+        printf("recalculate checksum\n");
+        // reset checksum
+        iph->check = 0;
+        tcph->check = 0;
+
+        // calculate new checksum
+        tcph->check = tcp_checksum((unsigned char *) iph);
+        iph->check = ip_checksum((unsigned char *) iph);
+
+        printList();
+
         // accept
+        return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
       } else {
         // no match port found, drop
-        printf("DROP\n");
+        printf("no match port found, drop\n");
         return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
       }
 
     } else {
       // outbound
       // check is there entry in nat table
+      printf("check is there entry in nat table\n");
       tempEntry = (struct Entry*)find(source_ip, source_port);
       if (tempEntry != NULL) {
-        //do nothing, translation step is at the last
+        // translation step is at the last
+        printf("Entry found\n");
 
       } else {
         // no entry found
+        printf("no entry found\n");
         // check is it a SYN packet
         if (SYN) {
           // create a new entry
+          printf("create a new entry\n");
           // the source IP-port pair
-          unsigned int wan_ip;
-          inet_pton(AF_INET, "10.3.1.3", &wan_ip);
           struct IP_PORT *wan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
           wan->ip = wan_ip;
           wan->port = wan_port;
@@ -101,15 +123,28 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
 
           insertFirst(wan, lan);
           // the newly assigned port number (between 10000 and 12000) incremental
+          printf("the newly assigned port number (between 10000 and 12000) incremental\n");
           wan_port++;
 
         } else {
           // not a SYN packet, drop
-          printf("DROP\n");
+          printf("not a SYN packet, drop\n");
           return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
         }
       }
       // do the translation
+      iph->saddr = htonl(wan_ip);
+      tcph->source = htons(wan_port);
+
+      // reset checksum
+      iph->check = 0;
+      tcph->check = 0;
+
+      // calculate new checksum
+      tcph->check = tcp_checksum((unsigned char *) iph);
+      iph->check = ip_checksum((unsigned char *) iph);
+
+      printList();
 
       // forward it
       return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
@@ -117,20 +152,9 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     }
   } else {
     // Others protocol, drop
-    printf("DROP\n");
+    printf("Others protocol, drop\n");
     return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
   }
-
-  // Print the payload;
-  printf("\n[");
-  unsigned char *pktData;
-  int len = nfq_get_payload(pkt, (char**)&pktData);
-  if (len > 0) {
-    for (i=0; i<len; i++) {
-      printf("%02x ", pktData[i]);
-    }
-  }
-  printf("]\n");
 
 }
 
@@ -145,7 +169,6 @@ int main(int argc, char **argv) {
   int len;
   char buf[4096];
 
-
   // Check the number of run-time argument
   if(argc != 4){
     fprintf(stderr, "Usage: ./%s <public ip> <internal ip> <subnet mask>\n", argv[0]);
@@ -155,6 +178,15 @@ int main(int argc, char **argv) {
   public_ip = argv[1];
   internal_ip = argv[2];
   subnet_mask = argv[3];
+
+  struct in_addr temp;
+  int mask_int = atoi(subnet_mask);
+  local_mask = (0xffffffff << (32-mask_int));
+  inet_aton(internal_ip, &temp);
+  local_network = ntohl(temp.s_addr) & local_mask;
+
+  inet_aton(public_ip, &wan_ip);
+  wan_ip = ntohl(wan_ip);
 
   // Open library handle
   if (!(h = nfq_open())) {
@@ -188,7 +220,9 @@ int main(int argc, char **argv) {
 
   fd = nfq_fd(h);
 
+  printf("before while\n");
   while ((len = recv(fd, buf, sizeof(buf), 0)) && len >= 0) {
+    printf("in while\n");
     nfq_handle_packet(h, buf, len);
 
   }
