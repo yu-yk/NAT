@@ -8,6 +8,10 @@
 #include "checksum.h"
 #include "table.h"
 
+#define CONNECTION_STATE_NORMAL 0
+#define CONNECTION_STATE_FIN 1
+#define CONNECTION_STATE_ACK 2
+
 //global variable
 char *public_ip;
 char *internal_ip;
@@ -39,6 +43,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   struct iphdr *iph = (struct iphdr*) payload;
   uint32_t source_ip = ntohl(iph->saddr);
   uint32_t dest_ip = ntohl(iph->daddr);
+  struct in_addr temp;
 
   struct tcphdr *tcph = (struct tcphdr *)(payload + (iph->ihl << 2));
 
@@ -50,11 +55,14 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   unsigned int FIN = tcph->fin;
   unsigned int RST = tcph->rst;
 
-  printf("SYN = %d\n\n\n\n", SYN);
 
   // check the protocol type, only accept TCP
-  printf("check the protocol type, only accept TCP\n");
   if (iph->protocol == IPPROTO_TCP) {
+    printf("\n");
+    printf("SYN = %d\n", SYN);
+    printf("ACK = %d\n", ACK);
+    printf("FIN = %d\n", FIN);
+    printf("RST = %d\n", RST);
     // TCP packets
     int inbound = 1;
 
@@ -65,14 +73,18 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
     }
 
     if (inbound) {
-      // inbound
-      // search dest port match nat table
+      printf("In bound packet\n");
+      temp.s_addr = iph->saddr;
+      printf("From %s:%d ", (char*)inet_ntoa(temp), source_port);
+      temp.s_addr = iph->daddr;
+      printf("to %s:%d\n", (char*)inet_ntoa(temp), dest_port);
       printf("search dest port match nat table\n");
       tempEntry = (struct Entry*)find(dest_ip, dest_port);
 
       if (tempEntry != NULL) {
-        // modifies the ip and tcp header
-        printf("modifies the ip and tcp header\n");
+        printf("entry found\n");
+
+        printf("translate ip and tcp header\n");
         // do the translation
         iph->daddr = htonl(tempEntry->lan->ip);
         tcph->dest = htons(tempEntry->lan->port);
@@ -87,6 +99,23 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         tcph->check = tcp_checksum((unsigned char *) iph);
         iph->check = ip_checksum((unsigned char *) iph);
 
+        // if it is rst packet, delete the entry
+        if (RST) {
+          deleteEntry(dest_ip, dest_port);
+        } else {
+          // check four way hand shake state
+          switch (tempEntry->four_way_state) {
+            case CONNECTION_STATE_NORMAL:
+              if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN; }
+              break;
+            case CONNECTION_STATE_FIN:
+              if (ACK) {  }
+              break;
+            case CONNECTION_STATE_ACK:
+
+          }
+        }
+
         printList();
 
         // accept
@@ -98,13 +127,22 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
       }
 
     } else {
-      // outbound
-      // check is there entry in nat table
+      printf("out bound packet\n");
+      temp.s_addr = iph->saddr;
+      printf("From %s:%d ", (char*)inet_ntoa(temp), source_port);
+      temp.s_addr = iph->daddr;
+      printf("to %s:%d\n", (char*)inet_ntoa(temp), dest_port);
       printf("check is there entry in nat table\n");
       tempEntry = (struct Entry*)find(source_ip, source_port);
+
       if (tempEntry != NULL) {
         // translation step is at the last
         printf("Entry found\n");
+
+        // if it is rst packet, delete the entry
+        if (RST) {
+          deleteEntry(source_ip, source_port);
+        }
 
       } else {
         // no entry found
@@ -121,9 +159,8 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
           lan->ip = source_ip;
           lan->port = source_port;
 
+          printf("insert new entry\n");
           insertFirst(wan, lan);
-          // the newly assigned port number (between 10000 and 12000) incremental
-          printf("the newly assigned port number (between 10000 and 12000) incremental\n");
           wan_port++;
 
         } else {
@@ -171,7 +208,7 @@ int main(int argc, char **argv) {
 
   // Check the number of run-time argument
   if(argc != 4){
-    fprintf(stderr, "Usage: ./%s <public ip> <internal ip> <subnet mask>\n", argv[0]);
+    fprintf(stderr, "Usage: %s <public ip> <internal ip> <subnet mask>\n", argv[0]);
     exit(1);
   }
 
@@ -220,9 +257,9 @@ int main(int argc, char **argv) {
 
   fd = nfq_fd(h);
 
-  printf("before while\n");
+
   while ((len = recv(fd, buf, sizeof(buf), 0)) && len >= 0) {
-    printf("in while\n");
+    printf("nfq_handle_packet\n");
     nfq_handle_packet(h, buf, len);
 
   }

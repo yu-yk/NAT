@@ -15,6 +15,7 @@ void insertFirst(struct IP_PORT *wan, struct IP_PORT *lan) {
 
    entry->wan = wan;
    entry->lan = lan;
+   entry->four_way_state = 0;
 
    //point it to old first node
    entry->next = head;
@@ -120,7 +121,8 @@ struct Entry* deleteEntry(unsigned int ip, unsigned int port) {
 //display the list
 void printList() {
    struct Entry *ptr = head;
-   printf("\n[ ");
+   printf("NAT table:\n");
+   printf("  WAN IP - PORT  |  LAN IP - PORT  |  State\n");
 
    //start from the beginning
    while(ptr != NULL) {
@@ -129,9 +131,9 @@ void printList() {
       printf("(%s,%d), ",(char*)inet_ntoa(temp),ptr->wan->port);
       temp.s_addr = htonl(ptr->lan->ip);
       printf("(%s,%d) ",(char*)inet_ntoa(temp),ptr->lan->port);
-      ptr = ptr->next;
+      printf("%d\n", ptr->four_way_state);
       printf("\n");
+      ptr = ptr->next;
    }
-
-   printf(" ]");
+   printf("\n");
 }

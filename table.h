@@ -11,6 +11,7 @@ struct Entry {
   struct Entry *next; // use port number to be the key
   struct IP_PORT *wan;
   struct IP_PORT *lan;
+  int four_way_state;
 };
 // struct Entry* hashArray[SIZE];
 // struct Entry* dummyEntry;
