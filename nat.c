@@ -14,6 +14,8 @@
 #define CONNECTION_STATE_FIN_2_IN 3
 #define CONNECTION_STATE_FIN_2_OUT 4
 
+int tcpfindport(void);
+
 //global variable
 char *public_ip;
 char *internal_ip;
@@ -21,8 +23,19 @@ char *subnet_mask;
 uint32_t local_network;
 unsigned int local_mask;
 unsigned int wan_ip;
-unsigned int wan_port = 10000;
+unsigned int wan_port;
+int port_used[2001] = {0};
 
+int tcpfindport() {
+  int i;
+  for (i = 10000; i <= 12000; i++) {
+    if (port_used[i-10000] == 0) {
+      port_used[i-10000] = 1;
+      return i;
+    }
+  }
+  return -1;
+}
 
 /*
 * Callback function installed to netfilter queue
@@ -104,6 +117,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         // if it is rst packet, delete the entry
         if (RST) {
           deleteEntry(dest_ip, dest_port);
+          port_used[dest_port-10000] = 0;
         } else {
           // check four way hand shake state
           switch (tempEntry->four_way_state) {
@@ -114,8 +128,13 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
               if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN_2_IN; }
               break;
             case CONNECTION_STATE_FIN_2_OUT:
-              if (ACK) { deleteEntry(dest_ip, dest_port); }
+              if (ACK) {
+                deleteEntry(dest_ip, dest_port);
+                port_used[dest_port-10000] = 0;
+              }
               break;
+            default:
+              printf("four_way_state error\n");
 
           }
         }
@@ -127,6 +146,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
       } else {
         // no match port found, drop
         printf("no match port found, drop\n");
+        printList();
         return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
       }
 
@@ -142,9 +162,11 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
       if (tempEntry != NULL) {
         // translation step is at the last
         printf("Entry found\n");
-
         // if it is rst packet, delete the entry
+        wan_ip = tempEntry->wan->ip;
+        wan_port = tempEntry->wan->port;
         if (RST) {
+          port_used[tempEntry->wan->port-10000] = 0;
           deleteEntry(source_ip, source_port);
         } else {
           // check four way hand shake state
@@ -156,8 +178,13 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
               if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN_2_OUT; }
               break;
             case CONNECTION_STATE_FIN_2_IN:
-              if (ACK) { deleteEntry(source_ip, source_port); }
+              if (ACK) {
+                port_used[tempEntry->wan->port-10000] = 0;
+                deleteEntry(source_ip, source_port);
+              }
               break;
+            default:
+              printf("four_way_state error\n");
           }
         }
 
@@ -168,9 +195,15 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         if (SYN) {
           // create a new entry
           printf("create a new entry\n");
+
           // the source IP-port pair
           struct IP_PORT *wan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
           wan->ip = wan_ip;
+          wan_port = tcpfindport();
+          if (wan_port == -1) {
+            printf("no available port\n");
+            exit(-1);
+          }
           wan->port = wan_port;
           struct IP_PORT *lan = (struct IP_PORT*) malloc(sizeof(struct IP_PORT));
           lan->ip = source_ip;
@@ -183,6 +216,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         } else {
           // not a SYN packet, drop
           printf("not a SYN packet, drop\n");
+          printList();
           return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
         }
       }
@@ -200,7 +234,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
 
       printList();
 
-      wan_port++;
+
       // forward it
       return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, data_len, payload);
 
@@ -208,6 +242,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
   } else {
     // Others protocol, drop
     printf("Others protocol, drop\n");
+    printList();
     return nfq_set_verdict(qh, nfq_id, NF_DROP, 0, NULL);
   }
 
