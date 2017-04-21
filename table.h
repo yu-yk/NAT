@@ -3,8 +3,8 @@
 #define __TABLE__
 
 struct IP_PORT {
-  unsigned int ip;
-  unsigned int port;
+  uint32_t ip;
+  uint16_t port;
 };
 // struct Entry;
 struct Entry {

@@ -9,8 +9,10 @@
 #include "table.h"
 
 #define CONNECTION_STATE_NORMAL 0
-#define CONNECTION_STATE_FIN 1
-#define CONNECTION_STATE_ACK 2
+#define CONNECTION_STATE_FIN_1_IN 1
+#define CONNECTION_STATE_FIN_1_OUT 2
+#define CONNECTION_STATE_FIN_2_IN 3
+#define CONNECTION_STATE_FIN_2_OUT 4
 
 //global variable
 char *public_ip;
@@ -47,8 +49,8 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
 
   struct tcphdr *tcph = (struct tcphdr *)(payload + (iph->ihl << 2));
 
-  unsigned int source_port = ntohs(tcph->source);
-  unsigned int dest_port = ntohs(tcph->dest);
+  uint16_t source_port = ntohs(tcph->source);
+  uint16_t dest_port = ntohs(tcph->dest);
   //flag bit
   unsigned int SYN = tcph->syn;
   unsigned int ACK = tcph->ack;
@@ -106,12 +108,14 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
           // check four way hand shake state
           switch (tempEntry->four_way_state) {
             case CONNECTION_STATE_NORMAL:
-              if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN; }
+              if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN_1_IN; }
               break;
-            case CONNECTION_STATE_FIN:
-              if (ACK) {  }
+            case CONNECTION_STATE_FIN_1_OUT:
+              if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN_2_IN; }
               break;
-            case CONNECTION_STATE_ACK:
+            case CONNECTION_STATE_FIN_2_OUT:
+              if (ACK) { deleteEntry(dest_ip, dest_port); }
+              break;
 
           }
         }
@@ -119,7 +123,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         printList();
 
         // accept
-        return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
+        return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, data_len, payload);
       } else {
         // no match port found, drop
         printf("no match port found, drop\n");
@@ -142,6 +146,19 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
         // if it is rst packet, delete the entry
         if (RST) {
           deleteEntry(source_ip, source_port);
+        } else {
+          // check four way hand shake state
+          switch (tempEntry->four_way_state) {
+            case CONNECTION_STATE_NORMAL:
+              if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN_1_OUT; }
+              break;
+            case CONNECTION_STATE_FIN_1_IN:
+              if (FIN) { tempEntry->four_way_state = CONNECTION_STATE_FIN_2_OUT; }
+              break;
+            case CONNECTION_STATE_FIN_2_IN:
+              if (ACK) { deleteEntry(source_ip, source_port); }
+              break;
+          }
         }
 
       } else {
@@ -161,7 +178,7 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
 
           printf("insert new entry\n");
           insertFirst(wan, lan);
-          wan_port++;
+
 
         } else {
           // not a SYN packet, drop
@@ -183,8 +200,9 @@ static int Callback(struct nfq_q_handle *qh, struct nfgenmsg *msg, struct nfq_da
 
       printList();
 
+      wan_port++;
       // forward it
-      return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, 0, NULL);
+      return nfq_set_verdict(qh, nfq_id, NF_ACCEPT, data_len, payload);
 
     }
   } else {
